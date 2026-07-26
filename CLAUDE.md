@@ -22,11 +22,13 @@ en LangGraph. Objectif = comprendre la boucle agentique en la construisant.
 ├── agent_graph.py   # Étape 2 : StateGraph LangGraph construit à la main
 │                    #   (nœuds agent / tools / human_review) avec pause et
 │                    #   validation humaine avant toute action sensible.
-├── tools.py         # Outils partagés par les agents : run_bash, read_file,
-│                    #   write_file, edit_file, + détection des appels sensibles
-│                    #   (is_sensitive) pour agent_graph.py.
+├── tools.py         # Capacités de l'agent : run_bash, read_file, write_file,
+│                    #   edit_file (confinement + neutralisation via security.py).
+├── security.py      # Politique de sécurité : is_sensitive (validation humaine),
+│                    #   safe_path (confinement), wrap_untrusted (anti-injection).
+├── tests/           # Tests pytest de security.py (purs, sans LLM).
 ├── pyproject.toml   # Dépendances (langgraph, langchain-anthropic, ...) et
-│                    #   config ruff / mypy.
+│                    #   config ruff / mypy / pytest.
 ├── .env             # ANTHROPIC_API_KEY (non versionné).
 └── .claude/
     ├── rules/       # Règles de code référencées ci-dessous (@-mentions).
@@ -42,8 +44,8 @@ python agent_graph.py                                          # étape 2, chat 
 
 `agent_graph.py` est la version « avancée » : le graphe est explicite, l'état
 est persisté via `MemorySaver` (un `thread_id` = une conversation), et toute
-écriture fichier ou commande shell destructrice (`rm`, `git push`, `chmod`, …)
-déclenche un `interrupt` demandant confirmation avant exécution.
+écriture fichier ou commande shell non explicitement sûre (allowlist dans
+`security.py`) déclenche un `interrupt` demandant confirmation avant exécution.
 
 ---
 

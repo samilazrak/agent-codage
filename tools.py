@@ -1,40 +1,25 @@
 """Outils de l'agent de codage.
 
 Chaque outil est une petite fonction décorée `@tool` : sa signature et sa
-docstring décrivent au LLM ce qu'il peut faire. La sortie d'un outil est une
-donnée NON FIABLE (cf. .claude/rules/untrusted-input-in-prompts.md) : elle est
-renvoyée au modèle pour analyse, jamais interprétée comme une instruction.
+docstring décrivent au LLM ce qu'il peut faire. Les capacités (ici) sont
+séparées de la politique de sécurité (security.py) :
+
+- les écritures et lectures fichier passent par `safe_path` (confinement) ;
+- les sorties de commande et de fichier sont encadrées par `wrap_untrusted`
+  (elles sont des données à analyser, jamais des instructions).
 """
 
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
-from langchain_core.messages import ToolCall
 from langchain_core.tools import tool
+
+from security import safe_path, wrap_untrusted
 
 BASH_TIMEOUT_SECONDS = 60
 
-# Motifs de commandes shell jugées destructrices : elles passent par une
-# validation humaine avant exécution (cf. is_sensitive).
-DESTRUCTIVE_BASH_PATTERNS = (
-    "rm ",
-    "mv ",
-    "dd ",
-    "mkfs",
-    "chmod",
-    "chown",
-    "git push",
-    "git reset",
-    "git clean",
-    ":(){",
-    "> ",
-    ">>",
-)
-
-# Outils qui modifient le système de fichiers : toujours soumis à validation.
-SENSITIVE_TOOL_NAMES = frozenset({"write_file", "edit_file"})
+_PATH_REFUSED = "Accès refusé : chemin hors du dossier de travail ou fichier sensible."
 
 
 @tool
@@ -45,7 +30,7 @@ def run_bash(command: str) -> str:
         command: La commande à exécuter.
 
     Returns:
-        La sortie combinée (stdout puis stderr), ou un marqueur si elle est vide.
+        La sortie combinée (stdout puis stderr), encadrée comme donnée non fiable.
     """
     result = subprocess.run(
         command,
@@ -54,32 +39,39 @@ def run_bash(command: str) -> str:
         text=True,
         timeout=BASH_TIMEOUT_SECONDS,
     )
-    return (result.stdout + result.stderr) or "(aucune sortie)"
+    output = (result.stdout + result.stderr) or "(aucune sortie)"
+    return wrap_untrusted(output)
 
 
 @tool
 def read_file(path: str) -> str:
-    """Lit et retourne le contenu texte d'un fichier.
+    """Lit et retourne le contenu texte d'un fichier du dossier de travail.
 
     Args:
         path: Chemin du fichier à lire.
     """
+    resolved = safe_path(path)
+    if resolved is None:
+        return _PATH_REFUSED
     try:
-        return Path(path).read_text(encoding="utf-8")
+        return wrap_untrusted(resolved.read_text(encoding="utf-8"))
     except OSError as error:
         return f"Erreur de lecture : {error}"
 
 
 @tool
 def write_file(path: str, content: str) -> str:
-    """Écrit (ou écrase) un fichier avec le contenu fourni.
+    """Écrit (ou écrase) un fichier du dossier de travail avec le contenu fourni.
 
     Args:
         path: Chemin du fichier à écrire.
         content: Contenu texte à écrire.
     """
+    resolved = safe_path(path)
+    if resolved is None:
+        return _PATH_REFUSED
     try:
-        Path(path).write_text(content, encoding="utf-8")
+        resolved.write_text(content, encoding="utf-8")
     except OSError as error:
         return f"Erreur d'écriture : {error}"
     return f"Écrit : {path} ({len(content)} caractères)"
@@ -87,7 +79,7 @@ def write_file(path: str, content: str) -> str:
 
 @tool
 def edit_file(path: str, old: str, new: str) -> str:
-    """Remplace une occurrence exacte de texte dans un fichier.
+    """Remplace une occurrence exacte de texte dans un fichier du dossier de travail.
 
     `old` doit apparaître exactement une fois dans le fichier, sinon aucune
     modification n'est appliquée.
@@ -97,9 +89,11 @@ def edit_file(path: str, old: str, new: str) -> str:
         old: Texte exact à remplacer.
         new: Texte de remplacement.
     """
-    file = Path(path)
+    resolved = safe_path(path)
+    if resolved is None:
+        return _PATH_REFUSED
     try:
-        content = file.read_text(encoding="utf-8")
+        content = resolved.read_text(encoding="utf-8")
     except OSError as error:
         return f"Erreur de lecture : {error}"
 
@@ -109,26 +103,8 @@ def edit_file(path: str, old: str, new: str) -> str:
     if occurrences > 1:
         return f"Texte ambigu ({occurrences} occurrences) : aucune modification."
 
-    file.write_text(content.replace(old, new), encoding="utf-8")
+    resolved.write_text(content.replace(old, new), encoding="utf-8")
     return f"Modifié : {path}"
 
 
 TOOLS = [run_bash, read_file, write_file, edit_file]
-
-
-def is_sensitive(tool_call: ToolCall) -> bool:
-    """Indique si un appel d'outil doit passer par une validation humaine.
-
-    Sont sensibles : les écritures fichier, et les commandes shell qui
-    correspondent à un motif destructeur.
-
-    Args:
-        tool_call: L'appel d'outil décidé par le LLM (`{"name", "args", "id"}`).
-    """
-    name = tool_call["name"]
-    if name in SENSITIVE_TOOL_NAMES:
-        return True
-    if name == "run_bash":
-        command = tool_call["args"].get("command", "")
-        return any(pattern in command for pattern in DESTRUCTIVE_BASH_PATTERNS)
-    return False

