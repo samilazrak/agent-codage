@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Environnement Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Outils
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# IDE
+.idea/
+.DS_Store

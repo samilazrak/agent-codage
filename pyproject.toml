@@ -1,0 +1,33 @@
+[project]
+name = "agent-codage"
+version = "0.1.0"
+description = "Agent de codage minimal en LangGraph — projet d'apprentissage"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.2",
+    "langchain-anthropic>=0.3.0",
+    "langchain-core>=0.3.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "mypy>=1.11.0",
+]
+
+# Repo de scripts (pas de package à builder) : on installe seulement les deps.
+[tool.setuptools]
+py-modules = []
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+ignore_missing_imports = true
