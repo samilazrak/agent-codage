@@ -65,6 +65,31 @@ Exemples à tester dans le chat :
 - Action sûre → `liste les fichiers du dossier` (s'exécute directement).
 - Action sensible → `crée un fichier test.txt avec "hello"` (demande `Autoriser ? [o/N]`).
 
+## Démo
+
+Session réelle (extrait) montrant les deux comportements : une commande de
+lecture s'exécute directement, une écriture fichier est mise en pause pour
+validation.
+
+```text
+$ uv run python agent_graph.py
+Agent de codage prêt (Ctrl-C pour quitter).
+
+> liste les fichiers du dossier courant
+  → run_bash: ls -la                    # commande de lecture → exécutée directement
+  Voici la liste : agent.py, agent_graph.py, security.py, tools.py, README.md, ...
+
+> crée un fichier demo.txt contenant le texte bonjour
+  → write_file(demo.txt)                # action sensible → mise en pause
+
+  ⚠️  L'agent veut effectuer une action sensible :
+     • write_file({'path': 'demo.txt', 'content': 'bonjour'})
+  Autoriser ? [o/N] o
+
+  Écrit : demo.txt (7 caractères)
+  Le fichier `demo.txt` a été créé avec le contenu "bonjour".
+```
+
 ## Sécurité
 
 Un agent de codage qui exécute du shell et lit des fichiers ouvre des vecteurs

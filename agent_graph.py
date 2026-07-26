@@ -153,9 +153,18 @@ def build_graph():
 
 
 def _print_stream(graph, payload, config) -> None:
-    """Streame l'exécution du graphe et affiche chaque nouveau message."""
-    for event in graph.stream(payload, config, stream_mode="values"):
-        event["messages"][-1].pretty_print()
+    """Streame l'exécution du graphe et affiche chaque nouveau message.
+
+    Utilise `stream_mode="updates"` : chaque nœud n'émet que les messages qu'il
+    ajoute. Cela évite de réafficher plusieurs fois le même message, ce que
+    ferait `stream_mode="values"` qui republie tout l'état à chaque étape.
+    """
+    for chunk in graph.stream(payload, config, stream_mode="updates"):
+        for update in chunk.values():
+            if not isinstance(update, dict):
+                continue  # évènements hors nœud (ex. "__interrupt__")
+            for message in update.get("messages", []):
+                message.pretty_print()
 
 
 def _ask_approval(pending_tool_calls: list[dict]) -> str:
